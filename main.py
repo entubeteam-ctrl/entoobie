@@ -644,8 +644,8 @@ async def on_ready():
         
         # Start tasks
  
-kst_checker.before_loop(bot.wait_until_ready)()
-        interval_checker.before_loop(bot.wait_until_ready)()
+        kst_checker.before_loop(bot.wait_until_ready)()
+                interval_checker.before_loop(bot.wait_until_ready)()
         kst_checker.start()
         interval_checker.start()
         
