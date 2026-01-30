@@ -661,3 +661,10 @@ async def on_ready():
         logger.info(f"📱 Servers: {len(bot.guilds)} | DB: {DB_PATH}")
     except Exception as e:
         logger.error(f"Startup error: {e}")
+
+# FINAL RUN - ADD THIS!
+if __name__ == "__main__":
+    if not TOKEN:
+        logger.error("❌ BOT_TOKEN missing!")
+        exit(1)
+    bot.run(TOKEN)
