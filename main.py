@@ -638,38 +638,21 @@ async def on_ready():
     try:
         await init_db()
         logger.info("✅ Database initialized")
-        
+
         synced = await bot.tree.sync()
         logger.info(f"✅ Synced {len(synced)} slash commands")
-        
-        # Start tasks
- 
-        kst_checker.before_loop(bot.wait_until_ready)()
-                interval_checker.before_loop(bot.wait_until_ready)()
+
+        # Start tasks (CORRECT INDENT + SYNTAX)
+        kst_checker.before_loop(bot.wait_until_ready())
+        interval_checker.before_loop(bot.wait_until_ready())
         kst_checker.start()
         interval_checker.start()
-        
+
         # Flask keepalive
         threading.Thread(target=run_flask, daemon=True).start()
         logger.info(f"🌐 Flask started on port {PORT}")
-        
+
         logger.info(f"🚀 {bot.user} ready! 19 commands + KST + Intervals ACTIVE!")
         logger.info(f"📱 Servers: {len(bot.guilds)} | DB: {DB_PATH}")
     except Exception as e:
         logger.error(f"Startup error: {e}")
-
-@bot.event
-async def on_guild_join(guild):
-    logger.info(f"✅ Joined guild: {guild.name} ({guild.id})")
-
-if __name__ == "__main__":
-    if not TOKEN:
-        logger.error("❌ Missing BOT_TOKEN")
-        exit(1)
-    if not YT_API_KEY:
-        logger.warning("⚠️ Missing YOUTUBE_API_KEY - stats will fail")
-    
-    try:
-        bot.run(TOKEN)
-    except Exception as e:
-        logger.error(f"Bot startup failed: {e}")
