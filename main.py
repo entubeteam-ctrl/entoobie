@@ -643,8 +643,9 @@ async def on_ready():
         logger.info(f"✅ Synced {len(synced)} slash commands")
         
         # Start tasks
-        await kst_checker.before_loop(bot.wait_until_ready)()
-        await interval_checker.before_loop(bot.wait_until_ready)()
+ 
+kst_checker.before_loop(bot.wait_until_ready)()
+        interval_checker.before_loop(bot.wait_until_ready)()
         kst_checker.start()
         interval_checker.start()
         
