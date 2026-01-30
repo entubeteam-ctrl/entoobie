@@ -599,31 +599,36 @@ async def kst_checker():
 
 @tasks.loop(minutes=1)
 async def interval_checker():
-    """Custom interval checks."""
+    """Custom interval checks - 1min-24h precise rescheduling."""
     try:
         now_str = datetime.now(KST).isoformat()
         rows = await safe_db("""
-            SELECT guild_id, video_id, channel_id, minutes 
+            SELECT vi.guild_id, vi.video_id, gv.channel_id, vi.minutes, gv.title
             FROM video_intervals vi 
             JOIN guild_videos gv ON vi.guild_id=gv.guild_id AND vi.video_id=gv.video_id
             WHERE datetime(vi.next_check) <= ?
         """, (now_str,), fetch=True) or []
-        
-        for guild_id, vid_id, ch_id, minutes in rows:
-            views, likes, title = await safe_yt_stats(vid_id)
-            if views:
+
+        for guild_id, vid_id, ch_id, minutes, db_title in rows:
+            # Get fresh stats
+            views, likes, yt_title = await safe_yt_stats(vid_id)
+            if views is not None:
                 guild = bot.get_guild(int(guild_id))
                 channel = guild.get_channel(int(ch_id)) if guild else None
                 if channel:
+                    # Use YT title first, then DB title, then video ID
+                    display_title = yt_title or db_title or vid_id
+                    
                     embed = discord.Embed(title="⏱️ Interval Update", color=0x0099ff)
                     embed.add_field(
-                        name=title or vid_id,
+                        name=display_title[:100],
                         value=f"**{views:,} views** | ❤️ **{likes:,}**\n📺 https://youtube.com/watch?v={vid_id}",
                         inline=False
                     )
                     await channel.send(embed=embed)
+                    logger.info(f"Interval update sent: {guild_id}:{vid_id} → {views:,} views")
                 
-                # Reschedule next check
+                # Reschedule NEXT check (precise timing)
                 next_check = (datetime.now(KST) + timedelta(minutes=minutes)).isoformat()
                 await safe_db(
                     "UPDATE video_intervals SET next_check=? WHERE guild_id=? AND video_id=?",
