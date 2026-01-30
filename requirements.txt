@@ -1,0 +1,5 @@
+discord.py
+aiosqlite
+aiohttp
+flask
+pytz
