@@ -26,7 +26,7 @@ KST = pytz.timezone('Asia/Seoul')
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Flask Keepalive
+# Flask Keepalive (RENDER.COM FIXED)
 app = Flask(__name__)
 @app.route("/") 
 @app.route("/health")
@@ -34,7 +34,8 @@ def health():
     return {"status": "alive", "servers": len(bot.guilds) if bot.is_ready() else 0}
 
 def run_flask():
-    app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
+    port = int(os.getenv('PORT') or 10000)  # DYNAMIC PORT FIRST
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 # UTILS (EMBEDDED)
 async def safe_db(query, params=(), fetch=False):
