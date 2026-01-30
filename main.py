@@ -529,7 +529,7 @@ async def servercheck(interaction: discord.Interaction):
         logger.error(f"servercheck error: {e}")
         await safe_send(interaction, "❌ Server check failed", ephemeral=True)
 
-# main.py - PART 5/5: Help + Tasks + Startup (FINAL)
+# main.py - PART 5/5: Help + Tasks + Startup (FINAL - FIXED)
 @bot.tree.command(name="help", description="All 19 commands")
 async def help_cmd(interaction: discord.Interaction):
     try:
@@ -610,15 +610,12 @@ async def interval_checker():
         """, (now_str,), fetch=True) or []
 
         for guild_id, vid_id, ch_id, minutes, db_title in rows:
-            # Get fresh stats
             views, likes, yt_title = await safe_yt_stats(vid_id)
             if views is not None:
                 guild = bot.get_guild(int(guild_id))
                 channel = guild.get_channel(int(ch_id)) if guild else None
                 if channel:
-                    # Use YT title first, then DB title, then video ID
                     display_title = yt_title or db_title or vid_id
-                    
                     embed = discord.Embed(title="⏱️ Interval Update", color=0x0099ff)
                     embed.add_field(
                         name=display_title[:100],
@@ -627,8 +624,7 @@ async def interval_checker():
                     )
                     await channel.send(embed=embed)
                     logger.info(f"Interval update sent: {guild_id}:{vid_id} → {views:,} views")
-                
-                # Reschedule NEXT check (precise timing)
+
                 next_check = (datetime.now(KST) + timedelta(minutes=minutes)).isoformat()
                 await safe_db(
                     "UPDATE video_intervals SET next_check=? WHERE guild_id=? AND video_id=?",
@@ -637,7 +633,7 @@ async def interval_checker():
     except Exception as e:
         logger.error(f"Interval checker error: {e}")
 
-# STARTUP
+# STARTUP (FIXED - NO before_loop COROUTINE ERROR)
 @bot.event
 async def on_ready():
     try:
@@ -647,11 +643,10 @@ async def on_ready():
         synced = await bot.tree.sync()
         logger.info(f"✅ Synced {len(synced)} slash commands")
 
-        # Start tasks (CORRECT INDENT + SYNTAX)
-        kst_checker.before_loop(bot.wait_until_ready())
-        interval_checker.before_loop(bot.wait_until_ready())
+        # ✅ CORRECT: Simple task.start() ONLY (no before_loop)
         kst_checker.start()
         interval_checker.start()
+        logger.info("✅ KST + Interval tasks started")
 
         # Flask keepalive
         threading.Thread(target=run_flask, daemon=True).start()
@@ -662,9 +657,6 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Startup error: {e}")
 
-# FINAL RUN - ADD THIS!
+# RUN BOT
 if __name__ == "__main__":
-    if not TOKEN:
-        logger.error("❌ BOT_TOKEN missing!")
-        exit(1)
     bot.run(TOKEN)
