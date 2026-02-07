@@ -45,6 +45,39 @@ def run_flask():
 Thread(target=run_flask, daemon=True).start()
 print("🌐 Flask ACTIVE - Render stays awake 24/7!")
 
+# PAGINATION CLASS (Plain text + buttons)
+class TextPaginator(discord.ui.View):
+    def __init__(self, pages, timeout=300):
+        super().__init__(timeout=timeout)
+        self.pages = pages
+        self.current_page = 0
+
+    @discord.ui.button(label="◀️ Prev", style=discord.ButtonStyle.grey)
+    async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page > 0:
+            self.current_page -= 1
+        await interaction.response.edit_message(content=self.pages[self.current_page])
+
+    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.grey)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page < len(self.pages) - 1:
+            self.current_page += 1
+        await interaction.response.edit_message(content=self.pages[self.current_page])
+
+    @discord.ui.button(label="⏹️ Stop", style=discord.ButtonStyle.red)
+    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(content=self.pages[self.current_page], view=None)
+
+async def start_paginator(interaction: discord.Interaction, pages):
+    """Start paginator with first page"""
+    if len(pages) <= 1:
+        await safe_response(interaction, pages[0])
+        return
+    
+    view = TextPaginator(pages)
+    await interaction.response.send_message(pages[0], view=view)
+
 # Safe response helper
 async def safe_response(interaction, content):
     try:
@@ -401,22 +434,41 @@ async def removevideo(interaction: discord.Interaction, url_or_id: str):
         await db_execute("DELETE FROM milestones WHERE video_id=?", (video_id,))
     await safe_response(interaction, f"🗑️ Removed **{count}** video(s)")
 
-@bot.tree.command(name="listvideos", description="Videos in current channel")
+@bot.tree.command(name="listvideos", description="Videos in current channel (paginated)")
 async def listvideos(interaction: discord.Interaction):
-    videos = await db_execute("SELECT title FROM videos WHERE channel_id=?", (interaction.channel.id,), fetch=True) or []
+    videos = await db_execute("SELECT title, video_id FROM videos WHERE channel_id=?", (interaction.channel.id,), fetch=True) or []
     if not videos:
         await safe_response(interaction, "📭 No videos in this channel")
-    else:
-        await safe_response(interaction, f"""📋 **Channel videos**:
-{chr(10).join(f"• {v['title']}" for v in videos)}""")
+        return
+    
+    page_size = 10
+    pages = []
+    for i in range(0, len(videos), page_size):
+        page_videos = videos[i:i+page_size]
+        page_content = f"📋 **Channel Videos** (Page {i//page_size + 1}/{((len(videos)-1)//page_size)+1})\n\n" + "\n".join(
+            f"• **{v['title'][:40]}** `{v['video_id'][:11]}`" for v in page_videos
+        )
+        pages.append(page_content)
+    
+    await start_paginator(interaction, pages)
 
-@bot.tree.command(name="serverlist", description="All server videos")
+@bot.tree.command(name="serverlist", description="All server videos (paginated)")
 async def serverlist(interaction: discord.Interaction):
-    videos = await db_execute("SELECT title FROM videos WHERE guild_id=?", (str(interaction.guild.id),), fetch=True) or []
+    videos = await db_execute("SELECT title, video_id FROM videos WHERE guild_id=?", (str(interaction.guild.id),), fetch=True) or []
     if not videos:
         await safe_response(interaction, "📭 No server videos")
-    else:
-        await safe_response(interaction, "📋 **Server videos**:\n" + "\n".join(f"• {v['title']}" for v in videos))
+        return
+    
+    page_size = 10
+    pages = []
+    for i in range(0, len(videos), page_size):
+        page_videos = videos[i:i+page_size]
+        page_content = f"📋 **Server Videos** (Page {i//page_size + 1}/{((len(videos)-1)//page_size)+1})\n\n" + "\n".join(
+            f"• **{v['title'][:40]}** `{v['video_id'][:11]}`" for v in page_videos
+        )
+        pages.append(page_content)
+    
+    await start_paginator(interaction, pages)
 
 @bot.tree.command(name="views", description="Check single video stats (URL or ID)")
 @app_commands.describe(url_or_id="YouTube URL or video ID")
@@ -458,28 +510,37 @@ async def forcecheck(interaction: discord.Interaction):
     content = "📊 **Force check results**:\n" + "\n".join(results[:10])
     await interaction.followup.send(content)
 
-@bot.tree.command(name="viewsall", description="Check ALL server video stats")
+@bot.tree.command(name="viewsall", description="Check ALL server video stats (paginated)")
 async def viewsall(interaction: discord.Interaction):
     await interaction.response.defer()
     videos = await db_execute("SELECT title, video_id FROM videos WHERE guild_id=?", (str(interaction.guild.id),), fetch=True) or []
     if not videos:
         await interaction.followup.send("⚠️ No videos in server")
         return
-    guild_id = str(interaction.guild.id)
-    results = []
     
+    guild_id = str(interaction.guild.id)
+    all_results = []
+    
+    # Fetch ALL stats first
     for video in videos:
         title, vid = video['title'], video['video_id']
         views, likes = await fetch_video_stats(vid)
         if views:
-            # UPDATE intervals table for KST tracker
-            await db_execute(
-                "INSERT OR REPLACE INTO intervals (video_id, guild_id, last_views, kst_last_views) VALUES (?, ?, ?, ?)",
-                (vid, guild_id, views, views)
-            )
-            results.append(f"📊 **{title}**: {views:,}❤️{likes:,}")
+            await db_execute("INSERT OR REPLACE INTO intervals (video_id, guild_id, last_views, kst_last_views) VALUES (?, ?, ?, ?)",
+                           (vid, guild_id, views, views))
+            all_results.append(f"📊 **{title[:35]}**: {views:,}❤️{likes:,}")
+        else:
+            all_results.append(f"❌ **{title[:35]}**: fetch failed")
+
+    # PAGINATE results
+    page_size = 10
+    pages = []
+    for i in range(0, len(all_results), page_size):
+        page_results = all_results[i:i+page_size]
+        page_content = f"📊 **Server Stats** (Page {i//page_size + 1}/{((len(all_results)-1)//page_size)+1})\n\n" + "\n".join(page_results)
+        pages.append(page_content)
     
-    await interaction.followup.send("📊 **Server stats**:\n" + "\n".join(results[:20]))
+    await start_paginator(interaction, pages)
 
 @bot.tree.command(name="reachedmilestones", description="Videos that hit millions")
 async def reachedmilestones(interaction: discord.Interaction):
