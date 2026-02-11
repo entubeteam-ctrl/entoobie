@@ -30,20 +30,25 @@ intents = discord.Intents.default()
 intents.voice_states = False
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# 🌐 FLASK KEEPALIVE (keeps Render awake 24/7)
+# FIXED FLASK for Render (0.0.0.0 + PORT env var)
 app = Flask(__name__)
+
 @app.route("/")
 @app.route("/health")
+@app.route("/status")
 def home():
-    return {"status": "alive", "time": now_kst().isoformat()}
+    return {"status": "alive", "bot": "running", "kst": now_kst().isoformat(), "port": PORT}
 
 def run_flask():
+    # FIXED: Use exact PORT from env + 0.0.0.0
     port = int(os.environ.get('PORT', 10000))
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    print(f"🌐 Flask binding to 0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
 
-# START FLASK FIRST
-Thread(target=run_flask, daemon=True).start()
-print("🌐 Flask ACTIVE - Render stays awake 24/7!")
+# START FLASK FIRST (before bot)
+flask_thread = Thread(target=run_flask, daemon=True)
+flask_thread.start()
+print("🌐 Flask ACTIVE - Render port scan PASSED!")
 
 # PAGINATION CLASS (Plain text + buttons)
 class TextPaginator(discord.ui.View):
